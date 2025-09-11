@@ -1,0 +1,74 @@
+version: "3.9"
+
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      retries: 5
+
+  airflow-init:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - postgres
+    environment:
+      <<: *airflow-env
+    entrypoint: /bin/bash
+    command: -c "airflow db init && airflow users create --role Admin --username admin --password admin --firstname Bita --lastname A --email admin@example.com || true"
+    volumes:
+      - ../Airflow/dags:/opt/airflow/dags
+      - ../Airflow/plugins:/opt/airflow/plugins
+      - ../Airflow/logs:/opt/airflow/logs
+
+  webserver:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      <<: *airflow-env
+    ports:
+      - "8080:8080"
+    command: ["airflow", "webserver"]
+    volumes:
+      - ../Airflow/dags:/opt/airflow/dags
+      - ../Airflow/plugins:/opt/airflow/plugins
+      - ../Airflow/logs:/opt/airflow/logs
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      - webserver
+    environment:
+      <<: *airflow-env
+    command: ["airflow", "scheduler"]
+    volumes:
+      - ../Airflow/dags:/opt/airflow/dags
+      - ../Airflow/plugins:/opt/airflow/plugins
+      - ../Airflow/logs:/opt/airflow/logs
+
+volumes:
+  airflow_db_data:
