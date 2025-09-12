@@ -3,3 +3,5 @@ requests
 boto3
 apache-airflow-providers-amazon
 apache-airflow-providers-postgres
+matplotlib
+numpy
